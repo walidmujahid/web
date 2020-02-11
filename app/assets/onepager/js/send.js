@@ -76,13 +76,74 @@ $(document).ready(function() {
   $('#advanced_toggle').on('click', function() {
     advancedToggle();
   });
+  $('.cb-value').click(function() {
+    var mainParent = $(this).parent('.toggle-btn');
+
+    if ($(mainParent).find('input.cb-value').is(':checked')) {
+
+      var username = $('.username-search').select2('data')[0] ? $('.username-search').select2('data')[0].text : '';
+      const url = '/tip/address/' + username;
+
+      fetch(url, {method: 'GET', credentials: 'include'}).then(function(response) {
+        return response.json();
+      }).then(function(json) {
+        if (json.addresses.length > 0 && json.addresses[0] !== '0x0') {
+          $('#send-stream-invite').css('display', 'none');
+          var validToken = validateStreamingToken();
+
+          if (!validToken) {
+            $(mainParent).find('input.cb-value').prop('checked', false);
+            _alert('The token you selected is not valid for streaming', 'error');
+          } else {
+            var proxyAddress = sablier_proxy_address();
+
+            if (!proxyAddress.startsWith('0x')) {
+              $(mainParent).find('input.cb-value').prop('checked', false);
+              _alert('Streaming tips is not available on this network', 'error');
+            } else {
+              $(mainParent).addClass('active');
+              $('#sablier-opts').css('display', 'block');
+            }
+          }
+        } else {
+          _alert({ message: gettext('Recipient does not have any payment address set. Click in the button below if you want to send an invite') }, 'warning');
+          $('#send-stream-invite').css('display', 'inline-block');
+        }
+      });
+    } else {
+      $(mainParent).removeClass('active');
+      $('#sablier-opts').css('display', 'none');
+    }
+  });
+  $('#duration').durationPicker({
+    lang: 'en',
+    onChanged: function(time) {
+      var tokenAddress = $('#token').val();
+
+      if (tokenAddress && tokenAddress != '0x0') {
+        var token = tokenAddressToDetails(tokenAddress);
+        var amount = parseFloat($('#amount').val());
+        var streamTime = parseInt(time);
+
+        if (amount > 0 && streamTime > 0) {
+          var deposit = getEffectiveStreamDeposit(amount, token.decimals, streamTime);
+          var streamPerSec = deposit.div(web3.toBigNumber(time)).div(web3.toWei(web3.toBigNumber(1), 'ether')).toNumber();
+          var text = `It will stream ${streamPerSec >= 0.001 ? `~${streamPerSec.toFixed(3)}` : '<0.001'} ${token.name} / sec`;
+
+          $('#stream-per-sec').html(text);
+        } else {
+          $('#stream-per-sec').html('</br>');
+        }
+      }
+    },
+    showSeconds: false
+  });
   $('#amount').on('keyup blur change', updateEstimate);
   $('#token').on('change', updateEstimate);
   $('#send').on('click', function(e) {
     e.preventDefault();
     if ($(this).hasClass('disabled'))
       return;
-    loading_button($(this));
     // get form data
     var email = $('#email').val();
     var github_url = $('#issueURL').val();
@@ -114,12 +175,33 @@ $(document).ready(function() {
       return;
     }
 
-    var success_callback = function(txid) {
+    var stream = $('input.cb-value').is(':checked');
+    var time = parseInt($('#duration').val());
+
+    if (stream && !validateStreamingToken()) {
+      _alert('The token you selected is not valid for streaming', 'error');
+      return;
+    }
+    if (stream && time <= 0) {
+      _alert('Please enter a valid time for streaming your tip', 'error');
+      return;
+    }
+
+    var success_callback = function(txid, streamid) {
 
       startConfetti();
       var url = 'https://' + etherscanDomain() + '/tx/' + txid;
 
-      $('#loading_trans').html('This transaction has been sent 👌');
+      var message = 'This transaction has been sent 👌';
+
+      if (streamid) {
+        var payerURL = get_sablier_url(streamid, false);
+
+        message = `Your streaming money has been created with ID <a href="${payerURL}" target="_blank" rel="noopener noreferrer">${streamid}</a> 💸`;
+        $('#stream_payee_info').css('display', 'block');
+        $('#sablier-payee-url').attr('href', get_sablier_url(streamid, true));
+      }
+      $('#loading_trans').html(message);
       $('#send_eth').css('display', 'none');
       $('#send_eth_done').css('display', 'block');
       $('#tokenName').html(tokenName);
@@ -137,7 +219,45 @@ $(document).ready(function() {
       unloading_button($('#send'));
     };
 
-    return sendTip(email, github_url, from_name, username, amount, comments_public, comments_priv, from_email, accept_tos, tokenAddress, expires, success_callback, failure_callback, false);
+    loading_button($(this));
+
+    return sendTip(email, github_url, from_name, username, amount, stream ? time : 0, comments_public, comments_priv, from_email, accept_tos, tokenAddress, expires, success_callback, failure_callback, false);
+
+  });
+
+  $('#send-stream-invite').on('click', function(e) {
+    e.preventDefault();
+
+    var username = $('.username-search').select2('data')[0] ? $('.username-search').select2('data')[0].text : '';
+    var from_email = $('#fromEmail').val();
+
+    if (!username) {
+      _alert('Please enter a recipient', 'error');
+      return;
+    }
+
+    loading_button($(this));
+
+    var url = '/tip/invite';
+
+    fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: JSON.stringify({
+        username: username,
+        from_email: from_email,
+        network: document.web3network
+      })
+    }).then(function(response) {
+      unloading_button($('#send-stream-invite'));
+      $('#send-stream-invite').addClass('disabled');
+      return response.json();
+    }).then(function(json) {
+      var is_success = json['status'] == 'OK';
+      var _class = is_success ? 'info' : 'error';
+
+      _alert(json['message'], _class);
+    });
 
   });
 
@@ -166,12 +286,44 @@ function validateEmail(email) {
   return re.test(email);
 }
 
+function validateStreamingToken() {
+  var tokenAddress = (
+    ($('#token').val() == '0x0') ?
+      '0x0000000000000000000000000000000000000000'
+      : $('#token').val());
+  var expires = parseInt($('#expires').val());
+
+  // derived info
+  var isSendingETH = (tokenAddress == '0x0' || tokenAddress == '0x0000000000000000000000000000000000000000');
+  var tokenDetails = tokenAddressToDetails(tokenAddress);
+  // TODO: Validate CompoundTokens
+
+  return !isSendingETH;
+}
+
 function isNumeric(n) {
   return !isNaN(parseFloat(n)) && isFinite(n);
 }
 
+function getEffectiveStreamDeposit(amount, decimals, time) {
+  var amountBN = web3.toBigNumber('1'.padEnd(decimals + 1, 0)).mul(web3.toBigNumber(amount * 1.0));
+  // var amountBN = web3.toWei(web3.toBigNumber(amount), 'ether');
 
-function sendTip(email, github_url, from_name, username, amount, comments_public, comments_priv, from_email, accept_tos, tokenAddress, expires, success_callback, failure_callback, is_for_bounty_fulfiller) {
+  return amountBN.sub(amountBN.mod(web3.toBigNumber(time)));
+}
+
+function transactionReceiptAsync(txHash, f) {
+  var transactionReceipt = web3.eth.getTransactionReceipt(txHash, function(error, receipt) {
+    if (receipt) {
+      f(receipt);
+    } else {
+      setTimeout(() => transactionReceiptAsync(txHash, f), 1000);
+    }
+  });
+}
+
+
+function sendTip(email, github_url, from_name, username, amount, streamTime, comments_public, comments_priv, from_email, accept_tos, tokenAddress, expires, success_callback, failure_callback, is_for_bounty_fulfiller) {
   if (typeof web3 == 'undefined') {
     _alert({ message: gettext('You must have a web3 enabled browser to do this.  Please download Metamask.') }, 'warning');
     failure_callback();
@@ -279,37 +431,42 @@ function sendTip(email, github_url, from_name, username, amount, comments_public
       } else {
         var is_direct_to_recipient = metadata['is_direct'];
         var destinationAccount = is_direct_to_recipient ? metadata['direct_address'] : metadata['address'];
+        var finalize_tip_registry = function(txid, streamid) {
+          const url = '/tip/send/4';
+
+          // TODO: store some metadata about streaming through this method
+          fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            body: JSON.stringify({
+              destinationAccount: destinationAccount,
+              txid: txid,
+              is_direct_to_recipient: is_direct_to_recipient,
+              creation_time: creation_time,
+              salt: salt
+            })
+          }).then(function(response) {
+            return response.json();
+          }).then(function(json) {
+            var is_success = json['status'] == 'OK';
+
+            if (!is_success) {
+              _alert(json, _class);
+            } else {
+              clear_metadata();
+              set_metadata();
+              success_callback(txid, streamid);
+            }
+          });
+
+        };
         var post_send_callback = function(errors, txid) {
           indicateMetamaskPopup(true);
           if (errors) {
             _alert({ message: gettext('There was an error.') }, 'warning');
             failure_callback();
           } else {
-            const url = '/tip/send/4';
-
-            fetch(url, {
-              method: 'POST',
-              credentials: 'include',
-              body: JSON.stringify({
-                destinationAccount: destinationAccount,
-                txid: txid,
-                is_direct_to_recipient: is_direct_to_recipient,
-                creation_time: creation_time,
-                salt: salt
-              })
-            }).then(function(response) {
-              return response.json();
-            }).then(function(json) {
-              var is_success = json['status'] == 'OK';
-
-              if (!is_success) {
-                _alert(json, _class);
-              } else {
-                clear_metadata();
-                set_metadata();
-                success_callback(txid);
-              }
-            });
+            finalize_tip_registry(txid);
           }
         };
 
@@ -321,7 +478,7 @@ function sendTip(email, github_url, from_name, username, amount, comments_public
             value: amountInDenom,
             gasPrice: web3.toHex(get_gas_price())
           }, post_send_callback);
-        } else {
+        } else if (streamTime == 0) { // Normal tip
           var send_erc20 = function() {
             var token_contract = web3.eth.contract(token_abi).at(tokenAddress);
 
@@ -340,6 +497,61 @@ function sendTip(email, github_url, from_name, username, amount, comments_public
             send_erc20();
           } else {
             send_gas_money_and_erc20();
+          }
+        } else { // Stream tip using Sablier
+          var deposit = getEffectiveStreamDeposit(amount, tokenDetails.decimals, streamTime);
+            
+          if (is_direct_to_recipient) {
+            var token_contract = web3.eth.contract(token_abi).at(tokenAddress);
+            var proxyAddress = sablier_proxy_address();
+            var proxy_contract = web3.eth.contract(sablier_proxy_abi).at(proxyAddress);
+            var recipient = metadata['direct_address'];
+
+            var post_stream_callback = function(errors, txid) {
+              indicateMetamaskPopup(true);
+              if (errors) {
+                _alert({ message: gettext('There was an error.') }, 'warning');
+                failure_callback();
+              } else {
+                _alert({ message: gettext('Creating stream...') }, 'info');
+                proxy_contract.CreateSalary({ company: fromAccount }, function(error, event) {
+                  if (!error) {
+                    var streamid = event.args.salaryId.toNumber();
+
+                    finalize_tip_registry(txid, streamid);
+                  }
+                });
+              }
+
+            };
+
+            var create_stream = function(errors, txid) {
+              if (errors) {
+                indicateMetamaskPopup(true);
+                _alert({ message: gettext('There was an error.') }, 'warning');
+                failure_callback();
+              } else {
+
+                transactionReceiptAsync(txid, function(receipt) {
+                  // Calculate streaming period
+                  var now = Math.round(new Date().getTime() / 1000);
+                  var time_delta = 900; // Delta of 15min
+                  var startTime = now + time_delta;
+                  var endTime = now + streamTime + time_delta;
+
+                  // Create streaming
+                  proxy_contract.createSalary(recipient, deposit, tokenAddress, startTime, endTime,
+                    post_stream_callback);
+                });
+              }
+                
+            };
+              
+            // Execute approve tx
+            _alert({ message: gettext('You will now be asked to confirm two transactions. The first is to approve token allowance.  The second will create the stream. (note: check Metamask extension, sometimes the 2nd confirmation window doesnt popup)') }, 'info');
+            token_contract.approve(proxyAddress, deposit, create_stream);
+          } else {
+            // TODO: manage when use does not have an account
           }
 
         }
@@ -361,9 +573,12 @@ function sendTip(email, github_url, from_name, username, amount, comments_public
         'creation_time': creation_time,
         'salt': salt
       });
-    } else {
+    } else if (streamTime == 0) {
       // pay out via secret sharing algo
       wait_for_metadata(got_metadata_callback);
+    } else {
+      _alert({ message: gettext('Recipient does not have any payment address set. Click in the button below if you want to send an invite') }, 'warning', 5000);
+      $('#send-stream-invite').css('display', 'inline-block');
     }
   });
 }

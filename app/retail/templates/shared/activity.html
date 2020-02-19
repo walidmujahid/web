@@ -145,7 +145,7 @@
             {{ row.metadata.title }}
           </a>
         {% elif row.activity_type == 'status_update' %}
-          <span>{{ row.metadata.title }} {% if row.metadata.ask != 'undefined' %}{{ row.metadata.ask }}{%endif%}</span>
+          <span id="status_update">{{ row.metadata.title }} {% if row.metadata.ask != 'undefined' %}{{ row.metadata.ask }}{%endif%}</span>
         {% elif row.activity_type == 'wall_post' %}
           &gt;
         {% if row.grant %}
@@ -237,6 +237,11 @@
               <span class="action px-0 {% if row.flagged %}open{%endif%}"><i class="far fa-flag mr-2"></i></span> Report
             </a>
             {% if row.profile.handle == github_handle %}
+              {% if row.activity_type == 'status_update' %}
+                <a href=# data-pk={{row.pk}} class="dropdown-item edit_activity px-3 font-smaller-5">
+                  <i class="fas fa-edit mr-2"></i> Edit
+                </a>
+              {% endif %}
             <a href=# data-pk={{row.pk}} class="dropdown-item delete_activity px-3 font-smaller-5">
               <i class="fas fa-trash mr-2"></i> Delete
             </a>

@@ -152,6 +152,10 @@ $(document).ready(function() {
       $('#btn_post').attr('disabled', false);
       $(this).removeClass('red');
       if ($('#textarea').is(':focus') && !e.shiftKey && e.keyCode == 13) {
+        if ($('.edit_activity')[0])
+          submitStatusUpdate();
+          e.preventDefault();
+          
         submitStatusUpdate();
         e.preventDefault();
       }

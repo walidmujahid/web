@@ -115,6 +115,24 @@ $(document).ready(function() {
     $('title').text(document.base_title);
   });
 
+  // edit status update
+  $(document).on('click', '.edit_activity', function(e) {
+    e.preventDefault();
+    if (!document.contxt.github_handle) {
+      _alert('Please login first.', 'error');
+      return;
+    }
+
+    const activity_id = $(this).data('pk');
+
+    let statusContainer = $(`.status_update[data-pk="${activity_id}"] #status_update`);
+    let editableContainer = $('<textarea id="textarea" class="form__input status-editable" data-maxlen="280" />');
+    let content = statusContainer.html().replace(/<br>/g, '\n');
+
+    editableContainer.append(content);
+    statusContainer.replaceWith(editableContainer);
+  });
+
   // delete activity
   $(document).on('click', '.delete_activity', function(e) {
     e.preventDefault();

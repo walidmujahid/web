@@ -4624,6 +4624,23 @@ class HackathonSponsor(SuperModel):
     chat_channel_id = models.CharField(max_length=255, blank=True, null=True)
 
 
+class HackathonTribe(SuperModel):
+    profile = models.ForeignKey(
+    'dashboard.Profile',
+    null=True,
+    on_delete=models.SET_NULL,
+    help_text="Tribe profile.",
+    )
+    hackathons = models.ManyToManyField(
+        'HackathonEvent',
+        help_text="Add hackathons this tribe sponsors.",
+    )
+    visible = models.BooleanField(help_text=_('Can this HackathonTribe be seen on /hackathons? Override if shown already.'), default=True)
+
+    def get_funded_hackathons(self, network):
+        return self.profile.get_funded_bounties(network).filter(event__isnull=False).distinct('event').count()
+
+
 class HackathonProject(SuperModel):
     PROJECT_STATUS = [
         ('invalid', 'invalid'),

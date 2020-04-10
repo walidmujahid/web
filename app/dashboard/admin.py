@@ -26,7 +26,7 @@ from django.utils.safestring import mark_safe
 from .models import (
     Activity, BlockedURLFilter, BlockedUser, Bounty, BountyEvent, BountyFulfillment, BountyInvites, BountySyncRequest,
     CoinRedemption, CoinRedemptionRequest, Coupon, Earning, FeedbackEntry, HackathonEvent, HackathonProject,
-    HackathonRegistration, HackathonSponsor, Interest, LabsResearch, PortfolioItem, Profile, ProfileView,
+    HackathonRegistration, HackathonSponsor, HackathonTribe, Interest, LabsResearch, PortfolioItem, Profile, ProfileView,
     RefundFeeRequest, SearchHistory, Sponsor, Tip, TipPayout, TokenApproval, Tool, ToolVote, TribeMember, UserAction,
     UserVerificationModel,
 )
@@ -359,6 +359,12 @@ class HackathonSponsorAdmin(admin.ModelAdmin):
     list_display = ['pk', 'hackathon', 'sponsor', 'sponsor_type']
 
 
+class HackathonTribeAdmin(admin.ModelAdmin):
+    """The admin object for the HackathonTribe model."""
+
+    list_display = ['pk', 'profile']
+
+
 class SponsorAdmin(admin.ModelAdmin):
     """The admin object for the Sponsor model."""
 
@@ -478,6 +484,7 @@ admin.site.register(ToolVote, ToolVoteAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
 admin.site.register(HackathonEvent, HackathonEventAdmin)
 admin.site.register(HackathonSponsor, HackathonSponsorAdmin)
+admin.site.register(HackathonTribe, HackathonTribeAdmin)
 admin.site.register(HackathonRegistration, HackathonRegistrationAdmin)
 admin.site.register(HackathonProject, HackathonProjectAdmin)
 admin.site.register(FeedbackEntry, FeedbackAdmin)

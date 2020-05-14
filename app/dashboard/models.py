@@ -5107,3 +5107,24 @@ class ObjectView(SuperModel):
 
     def __str__(self):
         return f"{self.viewer} => {self.target} on {self.created_on}"
+
+
+class HackathonWorkshop(SuperModel):
+    name = models.CharField(max_length=255)
+    start_date = models.DateTimeField()
+    cover = models.ImageField()
+    cover_max_width = models.PositiveSmallIntegerField(default=275, help_text="Custom image max-width. Default max-width of 275.")
+    hackathon = models.ForeignKey(
+        'dashboard.HackathonEvent',
+        related_name='workshop_event',
+        on_delete=models.CASCADE,
+        blank=True, null=True
+    )
+    speaker = models.ForeignKey(
+        'dashboard.Profile',
+        related_name='workshop_speaker',
+        on_delete=models.CASCADE,
+        help_text='Main speaker profile.'
+    )
+    url = models.URLField(help_text='Blog link, calendar link, or other.')
+    visible = models.BooleanField(help_text=_('Can this HackathonWorkshop be seen on /hackathons ?'), default=True)

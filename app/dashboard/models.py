@@ -4561,6 +4561,8 @@ class HackathonEvent(SuperModel):
     visible = models.BooleanField(help_text=_('Can this HackathonEvent be seeing on /hackathons ?'), default=True)
     default_channels = ArrayField(models.CharField(max_length=255), blank=True, default=list)
     is_featured = models.BooleanField(help_text=_('Feature this hackathon on the hackathon list page.'), default=False)
+    featured_logo_width = models.PositiveSmallIntegerField(default=316, help_text="Custom image width. Default width 316.")
+    featured_logo_height = models.PositiveSmallIntegerField(default=0, help_text="Custom image height. Value of 0 removes the attribute from image.Anything above 0 sets the height. Field is set to 0 by default.")
 
     objects = HackathonEventQuerySet.as_manager()
 
